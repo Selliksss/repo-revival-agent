@@ -1,0 +1,35 @@
+# Ground truth dataset for repo-revival-agent.
+# Each repo has an expected verdict — used to evaluate classifier accuracy.
+
+revive:
+  - url: https://github.com/obskyr/colorgram.py
+    name: colorgram.py
+    expected_reason: "Small palette-extraction lib. Few deps (likely Pillow). Last commit 2021 — bumpable. Narrow API, unlikely breaking changes."
+  - url: https://github.com/bndr/pycycle
+    name: pycycle
+    expected_reason: "Simple CLI utility that finds circular imports. Narrow scope, few deps. Last commit 2022 — easy bump and clean up."
+  - url: https://github.com/bfontaine/term2048
+    name: term2048
+    expected_reason: "Self-contained terminal game (2048). Minimal deps, stable curses API. Should bump cleanly to Python 3.12."
+
+fork:
+  - url: https://github.com/Shahabks/my-voice-analysis
+    name: my-voice-analysis
+    expected_reason: "Unique voice analysis logic (syllables, formants) without transcription. No direct drop-in alternative. Scientific stack needs modernization (numpy/scipy/parselmouth updates)."
+  - url: https://github.com/taraslayshchuk/es2csv
+    name: es2csv
+    expected_reason: "CLI for Elasticsearch-to-CSV export. Core scroll-to-csv logic is valuable, but elasticsearch-py v5 is incompatible with modern ES 7.x/8.x. Fork and rewrite against new client."
+  - url: https://github.com/selfspy/selfspy
+    name: selfspy
+    expected_reason: "Unique self-tracking logic (keyboard/mouse/window hooks). Last commit 2019, Python 2 era. No active drop-in alternative. Core event-capture logic worth porting to modern Python + cross-platform hooks."
+
+let_rest:
+  - url: https://github.com/rholder/retrying
+    name: retrying
+    expected_reason: "Succeeded by tenacity (same author, 6k+ stars, active). Drop-in replacement exists. Nothing unique remains."
+  - url: https://github.com/socialpoint-labs/sheetfu
+    name: sheetfu
+    expected_reason: "Google Sheets wrapper. Official gspread (7k+ stars) and google-api-python-client dominate the niche. No unique value."
+  - url: https://github.com/prashnts/hues
+    name: hues
+    expected_reason: "Terminal color library. Dominated by rich (40k+ stars), colorama, termcolor. Last commit 2020. Niche fully covered."
