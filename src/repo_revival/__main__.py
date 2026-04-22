@@ -1,6 +1,8 @@
 """repo-revival-agent CLI entry point."""
 import typer
 
+from repo_revival.scanner import scan
+
 app = typer.Typer(
     name="repo-revival",
     help="Autonomous agent that revives dead GitHub repositories.",
@@ -11,7 +13,8 @@ app = typer.Typer(
 @app.command()
 def analyze(repo_url: str):
     """Analyze a repo and output health report + verdict."""
-    typer.echo(f"TODO: analyze {repo_url}")
+    health = scan(repo_url)
+    typer.echo(f"✅ Report written: reports/{health.owner}_{health.name}_*.md")
 
 
 @app.command()
