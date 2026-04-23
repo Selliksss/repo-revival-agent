@@ -10,7 +10,7 @@ def detect_ci(repo_path: Path) -> dict[str, bool]:
     }
 
 
-def read_readme_excerpt(repo_path: Path, max_chars: int = 500) -> str:
+def read_readme_excerpt(repo_path: Path, max_chars: int = 1500) -> str:
     for name in ["README.md", "README.rst", "README.txt"]:
         p = repo_path / name
         if p.exists():
