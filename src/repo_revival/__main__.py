@@ -7,6 +7,7 @@ import typer
 
 from repo_revival.scanner import scan as scanner_scan
 from repo_revival.classifier import classify
+from repo_revival.revive.revive import revive as revive_do
 
 app = typer.Typer(
     name="repo-revival",
@@ -147,10 +148,10 @@ def _write_accuracy_report(results: list):
     typer.echo(f"📄 Summary: {summary_path}")
 
 
-@app.command()
-def revive(repo_url: str):
-    """Attempt to revive a repo: update deps, fix APIs, run tests."""
-    typer.echo(f"TODO: revive {repo_url}")
+@app.command(name="revive")
+def revive_cmd(repo_url: str, open_pr: bool = typer.Option(False, "--open-pr")):
+    """Fork, bump deps, show diff (default dry-run)."""
+    revive_do(repo_url, open_pr=open_pr)
 
 
 @app.command()

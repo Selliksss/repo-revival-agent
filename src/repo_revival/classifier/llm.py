@@ -7,6 +7,10 @@ from repo_revival.classifier.prompts import SYSTEM_PROMPT, FEW_SHOT
 
 client = Anthropic()
 
+
+def get_client() -> Anthropic:
+    return client
+
 SEARCH_SCHEMA = {
     "name": "search_github",
     "description": "Search GitHub for active alternatives to the repository being classified. Use to check if a modern replacement exists with more stars.",
