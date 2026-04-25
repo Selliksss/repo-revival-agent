@@ -68,6 +68,7 @@ def call_model(messages: list[dict]) -> list:
     return client.messages.create(
         model="claude-opus-4-7",
         max_tokens=2048,
+        temperature=0,
         system=[
             {"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}},
             {"type": "text", "text": FEW_SHOT, "cache_control": {"type": "ephemeral"}},
@@ -82,6 +83,7 @@ def classify_with_retry(user_msg: str) -> dict:
     search_count = 0
     MAX_SEARCHES = 3
     MAX_ITERATIONS = 5
+    search_calls: list[dict] = []
 
     for iteration in range(MAX_ITERATIONS):
         print(f"[iter {iteration}] calling model, messages={len(messages)}", flush=True)
@@ -99,7 +101,9 @@ def classify_with_retry(user_msg: str) -> dict:
         tool_results_content = []
         for block in tool_use_blocks:
             if block.name == "classify_repo":
-                return block.input
+                result = dict(block.input)
+                result["search_calls"] = search_calls
+                return result
 
             if block.name == "search_github":
                 query = block.input.get("query", "")
@@ -113,6 +117,7 @@ def classify_with_retry(user_msg: str) -> dict:
                     "tool_use_id": block.id,
                     "content": formatted,
                 })
+                search_calls.append({"query": query, "results": results[:3]})
 
         messages.append({"role": "user", "content": tool_results_content})
 
