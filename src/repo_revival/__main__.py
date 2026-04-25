@@ -8,6 +8,7 @@ import typer
 from repo_revival.scanner import scan as scanner_scan
 from repo_revival.classifier import classify
 from repo_revival.revive.revive import revive as revive_do
+from repo_revival.let_rest_issue.act import act as act_do
 
 app = typer.Typer(
     name="repo-revival",
@@ -158,6 +159,13 @@ def revive_cmd(repo_url: str, open_pr: bool = typer.Option(False, "--open-pr")):
 def fork(repo_url: str):
     """Generate a modernized skeleton fork of a legacy repo."""
     typer.echo(f"TODO: fork {repo_url}")
+
+
+@app.command(name="act")
+def act_cmd(repo_url: str, execute: bool = typer.Option(False, "--execute")):
+    """Scan, classify, and act based on verdict (dry-run by default)."""
+    result = act_do(repo_url, execute=execute)
+    typer.echo(result)
 
 
 def main():
