@@ -1,9 +1,28 @@
 import json
+import os
 import subprocess
+from pathlib import Path
+
+from dotenv import load_dotenv
 from anthropic import Anthropic
 
 from repo_revival.classifier.prompts import SYSTEM_PROMPT, FEW_SHOT
 
+# Load .env once at module import — override shell env vars (Claude Code MiniMax proxy)
+_env_path = Path(__file__).parents[2] / ".env"
+load_dotenv(_env_path, override=True)
+
+# Remove MiniMax proxy vars — subprocess must talk directly to api.anthropic.com
+os.environ.pop("ANTHROPIC_BASE_URL", None)
+os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
+os.environ.pop("ANTHROPIC_MODEL", None)
+os.environ.pop("ANTHROPIC_SMALL_FAST_MODEL", None)
+os.environ.pop("ANTHROPIC_DEFAULT_SONNET_MODEL", None)
+os.environ.pop("ANTHROPIC_DEFAULT_OPUS_MODEL", None)
+os.environ.pop("ANTHROPIC_DEFAULT_HAIKU_MODEL", None)
+
+api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+os.environ["ANTHROPIC_API_KEY"] = api_key
 
 client = Anthropic()
 
@@ -20,18 +39,6 @@ SEARCH_SCHEMA = {
             "query": {"type": "string", "description": "Search query for GitHub repositories"},
         },
         "required": ["query"],
-    },
-}
-
-READ_REPO_FILE_SCHEMA = {
-    "name": "read_repo_file",
-    "description": "Read a file from the cloned repository to inspect its contents. Use to examine setup.py, source files, examples, or configuration when classification is unclear.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "path": {"type": "string", "description": "Relative path to the file in the repository (e.g. setup.py, src/main.py, requirements.txt)"},
-        },
-        "required": ["path"],
     },
 }
 
@@ -80,21 +87,20 @@ def call_model(messages: list[dict]) -> list:
     return client.messages.create(
         model="claude-opus-4-7",
         max_tokens=2048,
-        temperature=0,
         system=[
             {"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}},
             {"type": "text", "text": FEW_SHOT, "cache_control": {"type": "ephemeral"}},
         ],
         messages=messages,
-        tools=[SEARCH_SCHEMA, READ_REPO_FILE_SCHEMA, CLASSIFY_SCHEMA],
+        tools=[SEARCH_SCHEMA, CLASSIFY_SCHEMA],
     ).content
 
 
-def classify_with_retry(user_msg: str, clone_path=None) -> dict:
+def classify_with_retry(user_msg: str) -> dict:
     messages: list[dict] = [{"role": "user", "content": [{"type": "text", "text": user_msg}]}]
     search_count = 0
     MAX_SEARCHES = 3
-    MAX_ITERATIONS = 8
+    MAX_ITERATIONS = 5
     search_calls: list[dict] = []
 
     for iteration in range(MAX_ITERATIONS):
@@ -130,31 +136,6 @@ def classify_with_retry(user_msg: str, clone_path=None) -> dict:
                     "content": formatted,
                 })
                 search_calls.append({"query": query, "results": results[:3]})
-
-            if block.name == "read_repo_file":
-                file_path = block.input.get("path", "")
-                if clone_path:
-                    full_path = clone_path / file_path
-                    try:
-                        content = full_path.read_text(encoding="utf-8", errors="replace")
-                        truncated = content[:4000] + ("\n... [truncated]" if len(content) > 4000 else "")
-                        tool_results_content.append({
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": truncated,
-                        })
-                    except Exception as e:
-                        tool_results_content.append({
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": f"Error reading {file_path}: {e}",
-                        })
-                else:
-                    tool_results_content.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": "Repository path not available.",
-                    })
 
         messages.append({"role": "user", "content": tool_results_content})
 

@@ -32,4 +32,4 @@ let_rest:
     expected_reason: "Google Sheets wrapper. Official gspread (7k+ stars) and google-api-python-client dominate the niche. No unique value."
   - url: https://github.com/prashnts/hues
     name: hues
-    expected_reason: "Terminal color library. Dominated by rich (40k+ stars), colorama, termcolor. Last commit 2020. Niche fully covered."
+    expected_reason: "Borderline case — model votes 2/3 let_rest but 1/3 revive. Niche (colored terminal text) commoditized by colorama/rich. True label is uncertain."

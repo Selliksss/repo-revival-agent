@@ -1,4 +1,5 @@
 """repo-revival-agent CLI entry point."""
+import json
 import yaml
 from pathlib import Path
 from datetime import datetime
@@ -33,8 +34,12 @@ def classify_cmd(repo_url: str):
 
 
 @app.command(name="batch")
-def batch(dataset_path: str):
-    """Process all repos in a dataset.yaml file."""
+def batch(
+    dataset_path: str,
+    start: int = typer.Option(0, "--start", help="Starting index (0-based)"),
+    count: int = typer.Option(0, "--count", help="Number of repos to process (0 = all)"),
+):
+    """Process repos in a dataset.yaml file. Use --start/--count for batching."""
     with open(dataset_path) as f:
         dataset = yaml.safe_load(f)
 
@@ -44,9 +49,13 @@ def batch(dataset_path: str):
         for repo in dataset.get(category, []):
             all_repos.append((repo["url"], category, repo["name"]))
 
-    for i, (url, expected, name) in enumerate(all_repos, 1):
+    end = start + count if count > 0 else len(all_repos)
+    slice_repos = all_repos[start:end]
+    total = len(all_repos)
+
+    for i, (url, expected, name) in enumerate(slice_repos, start + 1):
         owner = url.split("/")[-2]
-        typer.echo(f"[{i}/9] 🔍 {owner}/{name}...", nl=False)
+        typer.echo(f"[{i}/{total}] 🔍 {owner}/{name}...", nl=False)
         result = classify(url)
 
         correct = result.verdict == expected
@@ -61,12 +70,16 @@ def batch(dataset_path: str):
         })
 
         _write_classification_report(owner, name, url, result)
+        _save_progress(results, total)
 
         mark = "✓" if correct else "✗"
         status = "✅" if correct else "❌"
         typer.echo(f" {status} {result.verdict} (expected: {expected}) {mark}")
 
-    _write_accuracy_report(results)
+    if count > 0:
+        _write_accuracy_report(results, start=start, total=total)
+    else:
+        _write_accuracy_report(results)
 
 
 def _write_classification_report(owner: str, name: str, url: str, result):
@@ -130,13 +143,28 @@ def _build_health_table(h) -> str:
 {h.readme_excerpt[:300]}"""
 
 
-def _write_accuracy_report(results: list):
-    total = len(results)
+def _save_progress(results: list, total: int):
+    """Save intermediate results to test-repos/last_run.json."""
+    progress = {
+        "results": results,
+        "completed": len(results),
+        "total": total,
+    }
+    path = Path("test-repos/last_run.json")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(progress, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _write_accuracy_report(results: list, start: int = 0, total: int = 0):
+    if total == 0:
+        total = len(results)
     correct = sum(1 for r in results if r["correct"])
-    accuracy = correct / total if total else 0
+    accuracy = correct / len(results) if results else 0
 
     lines = [f"# Batch Classification Results\n"]
-    lines.append(f"**Accuracy: {correct}/{total} ({accuracy:.1%})**\n\n")
+    lines.append(f"**Accuracy: {correct}/{len(results)} ({accuracy:.1%})**\n\n")
+    if start > 0 or len(results) < total:
+        lines.append(f"*Partial run: repos {start+1}-{start+len(results)} of {total}*\n\n")
     lines.append("| Repo | Expected | Got | Correct |")
     lines.append("|------|----------|-----|---------|")
     for r in results:
@@ -145,7 +173,7 @@ def _write_accuracy_report(results: list):
 
     summary_path = Path("reports/accuracy.md")
     summary_path.write_text("\n".join(lines), encoding="utf-8")
-    typer.echo(f"\n📊 Accuracy: {correct}/{total} ({accuracy:.1%})")
+    typer.echo(f"\n📊 Accuracy: {correct}/{len(results)} ({accuracy:.1%})")
     typer.echo(f"📄 Summary: {summary_path}")
 
 
