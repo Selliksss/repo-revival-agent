@@ -105,6 +105,70 @@ replacement of retrying.
 3/3 consensus on rholder/retrying. prashnts/hues returned uncertain and
 was correctly skipped.
 
+## Day 5 (redux) — the auth bug
+
+**This is the most important entry in the entire log.**
+
+After days of debugging why classifier accuracy kept regressing (4/9, 6/9, 8/9),
+why retrying returned uncertain, why selfspy kept flipping verdict — I finally
+checked the one thing nobody thinks to question: which model is actually running.
+
+```bash
+printenv | grep -iE 'anthropic|minimax'
+```
+
+```
+ANTHROPIC_API_KEY=sk-ant-api03-...
+ANTHROPIC_BASE_URL=https://api.minimax.io/anthropic
+ANTHROPIC_AUTH_TOKEN=sk-cp-fv5zjl2xJ3wHynGyiFKntUmhUj2ykN5WpTemlGz9qX2M1wPpK5RwklBU_vB5vMtAU4H28dJEuD68usQrh-Nu7mHr4ouoDSR0jJKQ403SoEDXby3ElP_Mt80
+ANTHROPIC_MODEL=MiniMax-M2.7
+ANTHROPIC_SMALL_FAST_MODEL=MiniMax-M2.7
+ANTHROPIC_DEFAULT_OPUS_MODEL=MiniMax-M2.7
+```
+
+Claude Code was injecting MiniMax proxy variables into every subprocess.
+The Anthropic SDK reads `ANTHROPIC_BASE_URL` and silently routes all traffic
+there. The SDK does not log which endpoint it is hitting.
+The Python process never printed "Using MiniMax-M2.7".
+There was no error — just slightly wrong answers and high variance.
+
+**We ran the entire agent on MiniMax-M2.7 for 5 days, thinking it was Opus 4.7.**
+
+All the "fixes" we made on Day 5 — reverting the health report, removing
+read_repo_file, rolling back enrichment — were compensating for the weakness
+of the wrong model, not fixing real problems.
+
+**The fix:**
+```python
+from dotenv import load_dotenv
+load_dotenv(override=True)  # CRITICAL: override shell env vars
+
+import os
+os.environ.pop("ANTHROPIC_BASE_URL", None)
+os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
+os.environ.pop("ANTHROPIC_MODEL", None)
+os.environ.pop("ANTHROPIC_SMALL_FAST_MODEL", None)
+os.environ.pop("ANTHROPIC_DEFAULT_OPUS_MODEL", None)
+os.environ.pop("ANTHROPIC_DEFAULT_SONNET_MODEL", None)
+os.environ.pop("ANTHROPIC_DEFAULT_HAIKU_MODEL", None)
+
+client = Anthropic()  # now correctly routes to api.anthropic.com
+```
+
+**Lesson: when an SDK is silent about which endpoint it hits, log the resolved
+base_url and model on every run.** The Anthropic SDK could have printed
+"Using base_url: https://api.minimax.io/anthropic" on the first request.
+It didn't. We spent 5 days debugging model behavior that was actually
+proxy behavior.
+
+**Result after fix:** 8/9 confirmed on true Opus 4.7. A previous full run
+before rate-limiting hit 9/9.
+
+Every previous accuracy measurement (4/9, 6/9, 8/9 on "Day 4 baseline")
+was measuring MiniMax, not Opus.
+
+---
+
 ## Day 5 — scanner enrichment + read_repo_file tool
 
 Goal: enrich scanner signals and give the classifier the ability to read source files directly.
@@ -155,9 +219,9 @@ make use of the new signals, not be distracted by them.
 ## Counts so far
 
 - Repos analyzed: 9 (test dataset)
-- Classifier accuracy: 8/9
-- PRs opened: 1 — bfontaine/term2048#41
-- Issues opened: 1 — rholder/retrying#101
+- Classifier accuracy: 8/9 (confirmed on Opus 4.7)
+- PRs opened: 1 — bfontaine/term2048#41 (MiniMax-era artifact)
+- Issues opened: 1 — rholder/retrying#101 (MiniMax-era artifact)
 - Maintainers spammed with low-quality output: 0
 
 ## What I'd tell someone starting Day 1
@@ -169,3 +233,7 @@ make use of the new signals, not be distracted by them.
 - **"Quality over quantity" sounds like a platitude until you're staring
   at 4 generated PRs that would each annoy a maintainer.** Then it costs
   you real scope.
+- **Always verify which endpoint your SDK is hitting.** If your SDK doesn't
+  log the resolved URL and model on startup, add logging. The Anthropic
+  SDK silently accepts `ANTHROPIC_BASE_URL` and routes accordingly —
+  with no indication in output that routing changed.
