@@ -105,7 +105,48 @@ replacement of retrying.
 3/3 consensus on rholder/retrying. prashnts/hues returned uncertain and
 was correctly skipped.
 
-## What's left (Days 5–6)
+## Day 5 — scanner enrichment + read_repo_file tool
+
+Goal: enrich scanner signals and give the classifier the ability to read source files directly.
+
+**Scanner enrichment (models.py, filesystem.py, analyze.py):**
+- `has_python2_syntax` + `python2_samples`: scan `*.py` files for print-without-parens, xrange, urllib2, `.iter*()`, old except syntax
+- `uses_dead_deps`: check requirements.txt/setup.py/pyproject.toml against a 18-item dead-pkg list (theano, pycrypto, pycurl, etc.)
+- `successor_mentions`: regex scan README for "use X instead", "deprecated in favor of", "migrating to", "superseded by", "consider X"
+- `recent_issue_titles`: fetch last 5 open issue titles via `gh issue list`
+- README excerpt: 8000 chars (was 300)
+
+**Classifier tool: read_repo_file(path)**
+- Model can read any file from the cloned repo — setup.py, src/, examples/
+- Returns first 4000 chars, truncated with marker if longer
+- Max 8 tool-use iterations (up from 5) to allow deeper exploration
+
+**Accuracy test on 9-repo dataset: 4/9**
+- revive: 3/3 ✅ (colorgram, pycycle, term2048)
+- fork: 1/3 ✅ (es2csv), 2 uncertain (my-voice-analysis, selfspy)
+- let_rest: 0/3 — all three returned fork or uncertain
+
+Root cause: 4/9 uncertain verdicts. The new signals are being fed to the model
+but the strict consensus bar is too high for borderline cases. The model
+was choosing fork for my-voice-analysis in some runs and uncertain in others.
+selfspy and retrying similarly fell into disagreement.
+
+This is a regression from Day 4's 8/9 baseline. Analysis:
+- The model sees the new signals but the prompt wasn't updated to weight them
+- The read_repo_file tool gives the model more rope to explore — and more rope
+  sometimes means more confusion
+- The enriched health report (now 8k chars README) shifts the model's focus
+  away from the core signals
+
+**Action plan for Day 6:**
+1. Revert the enriched health format change (keep the signals available via read_repo_file instead)
+2. Reduce unnecessary context — README excerpt back to 300 chars
+3. Or: accept lower strictness, move to majority-vote consensus (2/3)
+
+Scanner enrichment is committed. The classifier needs prompt tuning to
+make use of the new signals, not be distracted by them.
+
+## What's left (Day 6)
 
 - README + GIF demo — the project looks dead from the outside without it
 - fork pipeline: bumper learns Python 2 → 3 fixes (xrange, print, urllib2)
