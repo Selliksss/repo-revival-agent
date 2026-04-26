@@ -169,6 +169,22 @@ confidence.
 Every previous accuracy measurement (4/9, 6/9, 8/9 on "Day 4 baseline")
 was measuring MiniMax, not Opus.
 
+**Final 9-repo baseline on Opus 4.7:**
+
+| Repo | Expected | Got | Confidence |
+|------|----------|-----|------------|
+| obskyr/colorgram.py | revive | revive | 0.85 |
+| bndr/pycycle | revive | revive | 0.82 |
+| bfontaine/term2048 | revive | revive | 0.90 |
+| Shahabks/my-voice-analysis | fork | fork | 0.75 |
+| taraslayshchuk/es2csv | fork | fork | 0.78 |
+| selfspy/selfspy | fork | fork | 0.78 |
+| rholder/retrying | let_rest | let_rest | 0.95 |
+| socialpoint-labs/sheetfu | let_rest | let_rest | 0.82 |
+| prashnts/hues | let_rest | let_rest | 0.90 |
+
+**Accuracy: 9/9 (100%)** — Baseline restored on real Opus 4.7.
+
 ---
 
 ## Day 5 — scanner enrichment + read_repo_file tool
@@ -239,3 +255,11 @@ make use of the new signals, not be distracted by them.
   log the resolved URL and model on startup, add logging. The Anthropic
   SDK silently accepts `ANTHROPIC_BASE_URL` and routes accordingly —
   with no indication in output that routing changed.
+
+## Day 6 — README, demo, fork pipeline
+
+**TODO (not executed yet):**
+- README.md with quickstart: install → run → example output
+- GIF demo (asciinema or terminalizer): running on rholder/retrying
+- Fork pipeline MVP: Python 2 → 3 auto-fix via 2to3 + tests
+- Extended dataset (15-20 repos): measurement after fork pipeline
