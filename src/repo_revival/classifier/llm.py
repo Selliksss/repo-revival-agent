@@ -23,6 +23,18 @@ SEARCH_SCHEMA = {
     },
 }
 
+READ_REPO_FILE_SCHEMA = {
+    "name": "read_repo_file",
+    "description": "Read a file from the cloned repository to inspect its contents. Use to examine setup.py, source files, examples, or configuration when classification is unclear.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "path": {"type": "string", "description": "Relative path to the file in the repository (e.g. setup.py, src/main.py, requirements.txt)"},
+        },
+        "required": ["path"],
+    },
+}
+
 CLASSIFY_SCHEMA = {
     "name": "classify_repo",
     "description": "Output final classification of a repository",
@@ -74,15 +86,15 @@ def call_model(messages: list[dict]) -> list:
             {"type": "text", "text": FEW_SHOT, "cache_control": {"type": "ephemeral"}},
         ],
         messages=messages,
-        tools=[SEARCH_SCHEMA, CLASSIFY_SCHEMA],
+        tools=[SEARCH_SCHEMA, READ_REPO_FILE_SCHEMA, CLASSIFY_SCHEMA],
     ).content
 
 
-def classify_with_retry(user_msg: str) -> dict:
+def classify_with_retry(user_msg: str, clone_path=None) -> dict:
     messages: list[dict] = [{"role": "user", "content": [{"type": "text", "text": user_msg}]}]
     search_count = 0
     MAX_SEARCHES = 3
-    MAX_ITERATIONS = 5
+    MAX_ITERATIONS = 8
     search_calls: list[dict] = []
 
     for iteration in range(MAX_ITERATIONS):
@@ -118,6 +130,31 @@ def classify_with_retry(user_msg: str) -> dict:
                     "content": formatted,
                 })
                 search_calls.append({"query": query, "results": results[:3]})
+
+            if block.name == "read_repo_file":
+                file_path = block.input.get("path", "")
+                if clone_path:
+                    full_path = clone_path / file_path
+                    try:
+                        content = full_path.read_text(encoding="utf-8", errors="replace")
+                        truncated = content[:4000] + ("\n... [truncated]" if len(content) > 4000 else "")
+                        tool_results_content.append({
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": truncated,
+                        })
+                    except Exception as e:
+                        tool_results_content.append({
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": f"Error reading {file_path}: {e}",
+                        })
+                else:
+                    tool_results_content.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": "Repository path not available.",
+                    })
 
         messages.append({"role": "user", "content": tool_results_content})
 

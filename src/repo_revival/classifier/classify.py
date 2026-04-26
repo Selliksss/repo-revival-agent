@@ -21,7 +21,7 @@ def classify(repo_url: str) -> ClassificationResult:
     # Strict consensus: 3 runs, all 3 must agree
     raw_runs = []
     for _ in range(3):
-        raw = llm.classify_with_retry(user_msg)
+        raw = llm.classify_with_retry(user_msg, clone_path=health.clone_path)
         raw_runs.append(raw)
 
     verdicts = [r["verdict"] for r in raw_runs]

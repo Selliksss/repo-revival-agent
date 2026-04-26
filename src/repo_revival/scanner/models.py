@@ -35,3 +35,10 @@ class RepoHealth(BaseModel):
     readme_excerpt: str
 
     dependencies: list[DependencyInfo]
+
+    # New signals
+    has_python2_syntax: bool = False
+    python2_samples: list[str] = []
+    uses_dead_deps: list[str] = []
+    successor_mentions: list[str] = []
+    recent_issue_titles: list[str] = []

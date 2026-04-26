@@ -24,10 +24,16 @@ def scan(repo_url: str) -> models.RepoHealth:
     authors = git.recent_authors(clone_dest)
 
     has_ci = filesystem.detect_ci(clone_dest)
-    readme_excerpt = filesystem.read_readme_excerpt(clone_dest)
+    readme_excerpt = filesystem.read_readme_excerpt(clone_dest, max_chars=8000)
     license_name = filesystem.detect_license(clone_dest)
 
     deps = dependencies.parse(clone_dest)
+
+    # New signals
+    has_py2_syntax, py2_samples = filesystem.detect_python2_syntax(clone_dest)
+    dead_deps = filesystem.detect_dead_deps(clone_dest)
+    successor_mentions = filesystem.detect_successor_mentions(clone_dest)
+    recent_issue_titles = filesystem.fetch_recent_issue_titles(owner, repo, limit=5)
 
     health = models.RepoHealth(
         name=repo,
@@ -48,6 +54,11 @@ def scan(repo_url: str) -> models.RepoHealth:
         has_ci=has_ci,
         readme_excerpt=readme_excerpt,
         dependencies=deps,
+        has_python2_syntax=has_py2_syntax,
+        python2_samples=py2_samples,
+        uses_dead_deps=dead_deps,
+        successor_mentions=successor_mentions,
+        recent_issue_titles=recent_issue_titles,
     )
 
     reporter.write_report(health, Path("reports/"))
