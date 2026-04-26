@@ -161,8 +161,10 @@ base_url and model on every run.** The Anthropic SDK could have printed
 It didn't. We spent 5 days debugging model behavior that was actually
 proxy behavior.
 
-**Result after fix:** 8/9 confirmed on true Opus 4.7. A previous full run
-before rate-limiting hit 9/9.
+**Result after fix:** 9/9 confirmed on true Opus 4.7 — all three verdict
+categories (revive, fork, let_rest) classified correctly across the full 9-repo
+test set. prashnts/hues (the borderline case) returned let_rest with 0.90
+confidence.
 
 Every previous accuracy measurement (4/9, 6/9, 8/9 on "Day 4 baseline")
 was measuring MiniMax, not Opus.
