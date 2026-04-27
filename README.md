@@ -8,6 +8,12 @@ opens a modernization PR, or points users to modern alternatives.
 **[rholder/retrying#101](https://github.com/rholder/retrying/issues/101)** —
 agent opened this issue on a real abandoned repo, pointing to tenacity as the modern successor.
 
+## Demo
+
+![demo](demo.gif)
+
+Agent classifies `rholder/retrying` as `let_rest`, generates a polite issue suggesting `tenacity` as the maintained successor, and stops in dry-run mode.
+
 ## Quickstart
 
 ```bash

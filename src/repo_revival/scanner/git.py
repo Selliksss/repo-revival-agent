@@ -7,7 +7,7 @@ from datetime import date
 def clone(url: str, dest: Path) -> Path:
     if dest.exists():
         shutil.rmtree(dest)
-    subprocess.run(["git", "clone", "--depth=1", url, str(dest)], check=True)
+    subprocess.run(["git", "clone", "--depth=1", url, str(dest)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return dest
 
 

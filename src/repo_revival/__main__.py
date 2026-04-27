@@ -193,7 +193,30 @@ def fork(repo_url: str):
 def act_cmd(repo_url: str, execute: bool = typer.Option(False, "--execute")):
     """Scan, classify, and act based on verdict (dry-run by default)."""
     result = act_do(repo_url, execute=execute)
-    typer.echo(result)
+    _print_act_result(result)
+
+
+def _print_act_result(result: dict):
+    verdict = result.get("verdict", "unknown")
+    action = result.get("action", "")
+    typer.echo("")
+    typer.echo(f"Verdict: {verdict.upper()}")
+    typer.echo(f"Action:  {action}")
+    if verdict == "let_rest":
+        if action == "dry_run":
+            typer.echo("")
+            typer.echo("─" * 70)
+            typer.echo(f"Title: {result.get('title', '')}")
+            typer.echo("─" * 70)
+            typer.echo("")
+            typer.echo(result.get("body", ""))
+            typer.echo("")
+            typer.echo("─" * 70)
+            typer.echo("(dry-run — pass --execute to open this issue on GitHub)")
+        elif action == "issue_opened":
+            typer.echo(f"URL:     {result.get('url', '')}")
+    elif verdict == "uncertain":
+        typer.echo(f"Reason:  {result.get('reasoning', '')}")
 
 
 def main():

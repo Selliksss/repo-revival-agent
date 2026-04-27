@@ -3,12 +3,20 @@ from pathlib import Path
 from repo_revival.classifier.llm import get_client
 
 
+DISCLAIMER_HEADER = """## Disclaimer
+🤖 This pull request was opened by [repo-revival-agent](https://github.com/Selliksss/repo-revival-agent), an experimental tool that analyzes inactive repositories and proposes modernization changes. A human reviewed this PR before opening. Feel free to close if not useful.
+
+---
+
+"""
+
+
 def generate_pr_description(changes: list[str], repo_info: dict) -> str:
     client = get_client()
     messages = [
         {
             "role": "user",
-            "content": f"Write a PR description for modernizing repository {repo_info['owner']}/{repo_info['repo']}.\n\nChanges made:\n" + "\n".join(f"- {c}" for c in changes) + "\n\nOutput markdown. Include: (1) what was changed, (2) why, (3) what was NOT tested. Max 200 words. Do not oversell."
+            "content": f"Write a PR description for modernizing repository {repo_info['owner']}/{repo_info['repo']}.\n\nChanges made:\n" + "\n".join(f"- {c}" for c in changes) + "\n\nOutput markdown. Include: (1) what was changed, (2) why, (3) what was NOT tested. Max 200 words. Do not oversell. Do NOT include a disclaimer or LLM-authorship section — that will be prepended automatically."
         }
     ]
     resp = client.messages.create(
@@ -17,10 +25,12 @@ def generate_pr_description(changes: list[str], repo_info: dict) -> str:
         system="You write honest, concise PR descriptions for repository modernization. Output markdown.",
         messages=messages,
     )
+    body = ""
     for block in resp.content:
         if block.type == "text":
-            return block.text
-    return ""
+            body = block.text
+            break
+    return DISCLAIMER_HEADER + body
 
 
 def commit_and_push(repo_path: Path, changes: list[str], dry_run: bool = False) -> None:

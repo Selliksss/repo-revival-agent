@@ -256,10 +256,70 @@ make use of the new signals, not be distracted by them.
   SDK silently accepts `ANTHROPIC_BASE_URL` and routes accordingly —
   with no indication in output that routing changed.
 
-## Day 6 — README, demo, fork pipeline
+## Day 6 — README, LICENSE, and the first maintainer feedback
 
-**TODO (not executed yet):**
-- README.md with quickstart: install → run → example output
-- GIF demo (asciinema or terminalizer): running on rholder/retrying
+**Shipped:**
+- README.md with quickstart, How it works, accuracy table (9/9), link to live artifact
+- LICENSE (MIT) + `license = "MIT"` field in pyproject.toml
+- CLI polish: `act` now prints formatted Verdict / Title / Body with separators instead of raw dict; debug logs gated behind `REPO_REVIVAL_DEBUG` env var; git clone stderr silenced
+
+### The first maintainer feedback (term2048#41)
+
+Three days after I opened bfontaine/term2048#41 (Day 3 revive PR, MiniMax-era
+artifact), the maintainer responded:
+
+> What was NOT tested
+>
+> Thanks but if you don't test your changes I can't accept them.
+>
+> Btw it would be better to run your agent under its own account or disclose
+> that this PR was done by a LLM.
+
+This is the most valuable feedback the project has received. Two distinct
+problems, both real, both my fault:
+
+**1. No automated test validation before opening a PR.**
+The Day 3 revive pipeline bumped dependencies and opened a PR, but never
+ran the target repo's test suite against the bumped versions. The PR body
+honestly disclosed this in a "What was NOT tested" section — but honest
+disclosure is not a substitute for actually testing. A maintainer cannot
+merge changes that the author didn't validate.
+
+**2. No LLM-authorship disclosure in revive PRs.**
+The let_rest pipeline opens issues with a mandatory disclaimer header
+("🤖 This issue was opened by repo-revival-agent..."). The revive pipeline
+opens PRs with no such header. This is a policy gap I missed — different
+action types had different disclosure rules.
+
+**Closed term2048#41.** Reopening only after both gaps are fixed.
+
+### New policies for the agent
+
+1. **All PRs and issues from the agent must include a mandatory
+   LLM-authorship disclaimer header.** Not optional, not configurable,
+   not skippable. Same template as let_rest issues.
+2. **Revive PRs must run the target repo's test suite against the bumped
+   dependencies before opening, and include the test results in the PR
+   body.** If the test suite fails or is missing, no PR is opened — the
+   verdict becomes `uncertain` and the agent does nothing.
+
+### Lessons
+
+- **Build-in-public works as a feedback mechanism, not just a marketing
+  channel.** One thoughtful maintainer comment is worth more than a hundred
+  views. The whole point of opening real PRs on real repos is to find out
+  what real maintainers think — and bfontaine just told me, clearly and
+  for free.
+- **Disclosure rules need to be uniform across action types.** I had a
+  good policy for one action type and no policy for the other, which is
+  worse than no policy at all because it looks intentional.
+- **Honest disclosure of "what wasn't tested" is not a substitute for
+  testing.** It's better than silence, but a maintainer's reasonable
+  reaction is "then come back when you've tested it." That's exactly
+  what happened.
+
+### Still TODO for Day 6
+
+- GIF demo (asciinema): running `act` on rholder/retrying
 - Fork pipeline MVP: Python 2 → 3 auto-fix via 2to3 + tests
-- Extended dataset (15-20 repos): measurement after fork pipeline
+- Extended dataset (15-20 repos)

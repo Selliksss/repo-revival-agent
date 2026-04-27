@@ -58,7 +58,8 @@ CLASSIFY_SCHEMA = {
 
 
 def search_github(query: str) -> list[dict]:
-    print(f"[search] query={query!r}", flush=True)
+    if os.environ.get("REPO_REVIVAL_DEBUG"):
+        print(f"[search] query={query!r}", flush=True)
     result = subprocess.run(
         [
             "gh", "api", "-X", "GET", "search/repositories",
@@ -69,7 +70,8 @@ def search_github(query: str) -> list[dict]:
         capture_output=True, text=True, check=True, timeout=15,
     )
     data = json.loads(result.stdout)
-    print(f"[search] got {len(data)} results", flush=True)
+    if os.environ.get("REPO_REVIVAL_DEBUG"):
+        print(f"[search] got {len(data)} results", flush=True)
     return data
 
 
@@ -104,9 +106,11 @@ def classify_with_retry(user_msg: str) -> dict:
     search_calls: list[dict] = []
 
     for iteration in range(MAX_ITERATIONS):
-        print(f"[iter {iteration}] calling model, messages={len(messages)}", flush=True)
+        if os.environ.get("REPO_REVIVAL_DEBUG"):
+            print(f"[iter {iteration}] calling model, messages={len(messages)}", flush=True)
         content = call_model(messages)
-        print(f"[iter {iteration}] got blocks: {[b.type for b in content]}", flush=True)
+        if os.environ.get("REPO_REVIVAL_DEBUG"):
+            print(f"[iter {iteration}] got blocks: {[b.type for b in content]}", flush=True)
 
         tool_use_blocks = [b for b in content if b.type == "tool_use"]
         if not tool_use_blocks:
