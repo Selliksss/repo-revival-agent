@@ -3,6 +3,7 @@ name = "repo-revival-agent"
 version = "0.1.0"
 description = "Autonomous agent that revives dead GitHub repositories — or tells you to let them rest."
 readme = "README.md"
+license = "MIT"
 authors = [
     { name = "Selliksss", email = "277231264+Selliksss@users.noreply.github.com" }
 ]
