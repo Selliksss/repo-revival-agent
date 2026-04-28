@@ -330,6 +330,88 @@ action types had different disclosure rules.
 
 `demo.gif` (223K, recorded with asciinema + agg) shows `act` running on rholder/retrying end-to-end. Embedded at the top of the README so it is the first thing a visitor sees.
 
+## Day 7 — Bot identity
+
+The most important architectural change since the auth-bug fix.
+
+**Context.** When bfontaine reviewed term2048#41, his second comment was:
+
+> Btw it would be better to run your agent under its own account or
+> disclose that this PR was done by a LLM.
+
+The first part of that — "run your agent under its own account" — is not
+just an etiquette suggestion. It's how every legitimate bot on GitHub
+operates: Dependabot, Renovate, pre-commit-ci. Maintainers know to expect
+those identities; they have public track records visible on a single
+profile page; opt-outs and rate limits target a stable identity rather
+than a person.
+
+Running the agent under @Selliksss conflates two things — my personal
+contributions graph and the agent's actions. A maintainer looking at my
+profile sees both, and can't tell which is which. That's bad for me
+(my dev profile is full of bot artifacts) and bad for them (no clean
+audit of the agent's behavior).
+
+**What was built:**
+- New GitHub account: **@repo-revival-agent** with profile README
+  declaring what the agent does, what it doesn't do, and how to opt out
+  (`[no-agent]` comment).
+- **Classic PAT** (not fine-grained — fine-grained tokens can't act on
+  repos outside the token owner's account, which is a hard blocker for
+  cross-account agents).
+- New module `src/repo_revival/bot_env.py` with `bot_env()` and
+  `bot_user()` helpers. Every `gh` and `git push` subprocess in the
+  agent passes `env=bot_env()` so the GH CLI authenticates as the bot.
+- Hardcoded `Selliksss` references in `revive/pr.py` (`--head` arg)
+  replaced with `bot_user()`.
+
+**Side discovery — generator robustness.**
+
+While testing on `Selliksss/test-bot-victim` (a deliberately empty
+test repo named "test-bot-victim"), the model recognized the target
+as a test and **refused to generate an issue** — explanation:
+*"I should not generate this issue. The verdict is `let_rest`, meaning..."*
+
+The generator parsed line 1 as the title and called `gh issue create`
+with that as `--title`. GitHub rejected the >256-char title with a
+cryptic CalledProcessError.
+
+The right response is not to outwit the model — it's right to refuse.
+Added three guards in `generator.py`:
+1. Title >200 chars → `RuntimeError("...likely a refusal: ...")`
+2. Title starts with "I should" / "I cannot" / "I won't" / "I refuse" →
+   `RuntimeError("Generator refused to produce issue: ...")`
+3. Title doesn't start with "Suggestion" → `RuntimeError(...)`
+
+Now if the model refuses, the agent surfaces a clean error and does
+nothing. The model's instinct here was correct — opening an issue on
+"test-bot-victim" *would* be wrong. The fix is to make that refusal
+machine-readable, not to silence it.
+
+**Verification.**
+
+Created `Selliksss/legacy-utils-archive` (realistic-looking dead Python
+project: README + setup.py + "no longer actively maintained" status).
+Ran `act --execute`. Bot opened a clean issue:
+[Selliksss/legacy-utils-archive#1](https://github.com/Selliksss/legacy-utils-archive/issues/1).
+Author: @repo-revival-agent. Disclaimer present, body well-structured,
+title under length limit. End-to-end works.
+
+**What this closes.**
+- Policy #1 from Day 6 (mandatory LLM-disclaimer in PRs/issues): now
+  closed in code on **two** levels — the disclaimer header in
+  `revive/pr.py` *and* the bot identity itself, which is the more
+  important signal.
+- The "looks like a person spamming maintainers" failure mode of
+  bfontaine#41. Future PRs are clearly authored by a bot.
+
+**What's still open.**
+- Policy #2: test-suite runner before opening revive PRs.
+- Reopen term2048#41 with both fixes (now possible).
+- Opt-out mechanism: read `[no-agent]` comments / `.no-agents` file
+  / CONTRIBUTING.md before action.
+- Throttling: max one action per maintainer per N days.
+
 ### Still TODO
 
 - Test-suite runner in revive pipeline (closes policy #2 in code, not just in BUILD_LOG)
