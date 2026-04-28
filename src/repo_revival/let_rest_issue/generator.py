@@ -72,4 +72,11 @@ Output ONLY: first line is the issue title (max 80 chars, no # prefix, format: "
         title = f"{health.languages[0] if health.languages else 'Repo'} repository suggestion"
         body = text
 
+    if len(title) > 200:
+        raise RuntimeError(f"Generator returned title >200 chars (likely a refusal): {title[:200]}")
+    if title.lower().startswith(("i should", "i cannot", "i won't", "i refuse")):
+        raise RuntimeError(f"Generator refused to produce issue: {title[:200]}")
+    if not title.lower().startswith("suggestion"):
+        raise RuntimeError(f"Generator title does not start with 'Suggestion': {title[:200]}")
+
     return title, body

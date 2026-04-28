@@ -1,5 +1,7 @@
 import subprocess
 from pathlib import Path
+
+from repo_revival.bot_env import bot_env, bot_user
 from repo_revival.classifier.llm import get_client
 
 
@@ -40,7 +42,7 @@ def commit_and_push(repo_path: Path, changes: list[str], dry_run: bool = False) 
     if dry_run:
         typer.echo("[dry-run] Skipping git push")
         return
-    subprocess.run(["git", "push", "-u", "origin", "revive/modernize-deps"], cwd=repo_path, check=True)
+    subprocess.run(["git", "push", "-u", "origin", "revive/modernize-deps"], cwd=repo_path, env=bot_env(), check=True)
 
 
 def open_pr(owner: str, repo: str, description: str, dry_run: bool = False) -> str | None:
@@ -48,8 +50,8 @@ def open_pr(owner: str, repo: str, description: str, dry_run: bool = False) -> s
         typer.echo("[dry-run] Skipping PR creation")
         return None
     result = subprocess.run(
-        ["gh", "pr", "create", "--repo", f"{owner}/{repo}", "--head", "Selliksss:revive/modernize-deps",
+        ["gh", "pr", "create", "--repo", f"{owner}/{repo}", "--head", f"{bot_user()}:revive/modernize-deps",
          "--title", "Modernize dependencies", "--body", description],
-        capture_output=True, text=True, check=True
+        capture_output=True, text=True, check=True, env=bot_env(),
     )
     return result.stdout.strip()
