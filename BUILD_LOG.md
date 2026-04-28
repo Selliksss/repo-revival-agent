@@ -412,10 +412,60 @@ title under length limit. End-to-end works.
   / CONTRIBUTING.md before action.
 - Throttling: max one action per maintainer per N days.
 
+## Day 8 — test runner Stage 1 + revive pipeline integration
+
+**Commit:** f860bb3
+
+**What was built:**
+- `src/repo_revival/revive/tester.py` — `detect_tests()` + `run_tests()`.
+  `detect_tests()` checks in order: pytest.ini, `[tool.pytest]` in pyproject.toml,
+  `tests/` dir, `test_*.py` files, `[tool:pytest]` in setup.cfg.
+  `run_tests()` creates an isolated `.venv-test` venv (via `uv venv --seed --clear`),
+  installs the target package (`pip install -e .`), then upgrades pytest
+  (`pip install pytest --upgrade`) to avoid self-hosting-repo issues
+  (pytest itself bundles an old pytest version). Runs the suite with
+  `pytest -v --tb=short`, captures stdout/stderr tails, and parses
+  pass/fail/errors/skipped counts using `finditer`-based regex that handles
+  all pytest summary formats in any order.
+- `revive/revive.py` — test runner called after bumper, before commit+push.
+  If `status != "passed"`, abort with message. Policy gate is enforced
+  at the pipeline level, not advisory.
+- `revive/pr.py` — `format_test_results()` helper renders a markdown block
+  (emoji header + stats + collapsible stdout tail). `generate_pr_description()`
+  accepts optional `test_result` dict and appends the block after LLM body.
+  Model prompt tells it not to generate its own "Test results" section
+  (verified: LLM respects the instruction, no duplication).
+
+**Key technical findings:**
+- `uv venv` by default creates a bare venv with no pip/setuptools/wheel.
+  Must use `--seed` flag to get pip included.
+- `--clear` flag required on re-runs — `uv venv` refuses to overwrite
+  an existing venv without it.
+- Order matters: `pip install -e .` then `pip install pytest --upgrade`.
+  Some self-hosting repos (like pytest itself) bundle an old pytest version
+  as a dependency; without `--upgrade` after `pip install -e .`, the bundled
+  old version wins and collection fails.
+- Pytest summary format: `===== N passed in Xs =====` when clean;
+  `===== N errors in Xs =====` when collection fails; `===== N failed, M passed in Xs =====`
+  for mixed. Parser handles all via `finditer` on count+label pairs.
+
+**What this closes.**
+- Policy #2 from bfontaine/term2048#41: "Thanks but if you don't test your
+  changes I can't accept them." — now enforced in code. Tests must pass
+  before PR is opened.
+- Both policies from the maintainer review are now closed: identity (Day 7)
+  and test validation (Day 8).
+
+**What's still open.**
+- Reopen term2048#41 with both fixes in place (now possible).
+- Fork pipeline MVP: Python 2 → 3 auto-fix via 2to3 + tests.
+- Opt-out mechanism.
+- Throttling.
+
 ### Still TODO
 
-- Test-suite runner in revive pipeline (closes policy #2 in code, not just in BUILD_LOG)
-- Reopen term2048#41 with both fixes in place (disclaimer header + test results)
+- Test-suite runner in revive pipeline (closes policy #2 in code — DONE f860bb3)
+- Reopen term2048#41 with both fixes in place
 - Fork pipeline MVP: Python 2 → 3 auto-fix via 2to3 + tests
 - Extended dataset (15-20 repos)
 - Distribution: X-thread or Telegram post about the auth-bug story
