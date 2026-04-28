@@ -1,6 +1,6 @@
 from pathlib import Path
 import typer
-from repo_revival.revive import fork, bumper, pr
+from repo_revival.revive import fork, bumper, pr, tester
 
 
 def revive(repo_url: str, open_pr: bool = False) -> None:
@@ -27,12 +27,31 @@ def revive(repo_url: str, open_pr: bool = False) -> None:
     import subprocess
     subprocess.run(["git", "diff"], cwd=repo_path)
 
+    typer.echo("\n🧪 Running test suite against bumped deps...")
+    test_result = tester.run_tests(repo_path)
+    status = test_result["status"]
+    typer.echo(f"   status: {status}")
+    if test_result.get("tests"):
+        typer.echo(f"   tests:  {test_result['tests']}")
+    if test_result.get("reason"):
+        typer.echo(f"   reason: {test_result['reason']}")
+    if status == "error":
+        typer.echo(f"   stage:  {test_result.get('stage')}")
+        typer.echo(f"   stderr tail:\n{test_result.get('stderr_tail', '')}")
+
+    if status != "passed":
+        typer.echo(
+            f"\n❌ Aborting: tests did not pass (status={status}). "
+            f"Per policy, revive PR is not opened when test suite fails or is missing."
+        )
+        return
+
     if not open_pr:
-        typer.echo("\n[dry-run] Done. To open real PR: --open-pr")
+        typer.echo("\n[dry-run] Tests passed. To open real PR: --open-pr")
         return
 
     typer.echo("\n📝 Generating PR description...")
-    description = pr.generate_pr_description(all_changes, {"owner": owner, "repo": repo})
+    description = pr.generate_pr_description(all_changes, {"owner": owner, "repo": repo}, test_result=test_result)
     typer.echo("\n--- PR DESCRIPTION ---")
     typer.echo(description)
     typer.echo("--- END ---\n")

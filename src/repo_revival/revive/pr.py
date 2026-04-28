@@ -13,12 +13,51 @@ DISCLAIMER_HEADER = """## Disclaimer
 """
 
 
-def generate_pr_description(changes: list[str], repo_info: dict) -> str:
+def format_test_results(test_result: dict) -> str:
+    """Render a markdown block describing how the test suite ran against the bumped deps."""
+    status = test_result.get("status")
+    tests = test_result.get("tests") or {}
+    stdout_tail = test_result.get("stdout_tail", "")
+
+    if status == "passed":
+        header = "## Test results\n\n✅ Test suite passed against bumped dependencies."
+    elif status == "failed":
+        header = "## Test results\n\n❌ Test suite FAILED against bumped dependencies."
+    elif status == "no_tests":
+        header = f"## Test results\n\n⚠️ No test suite detected ({test_result.get('reason', '')})."
+    elif status == "error":
+        header = f"## Test results\n\n⚠️ Test runner errored at stage `{test_result.get('stage', '?')}` — could not verify."
+    else:
+        header = f"## Test results\n\nUnknown status: {status}"
+
+    stats = ""
+    if tests:
+        stats = (
+            f"\n\n- Passed: {tests.get('passed', 0)}"
+            f"\n- Failed: {tests.get('failed', 0)}"
+            f"\n- Errors: {tests.get('errors', 0)}"
+            f"\n- Skipped: {tests.get('skipped', 0)}"
+            f"\n- Duration: {tests.get('duration_s', 0)}s"
+        )
+
+    details = ""
+    if stdout_tail:
+        details = (
+            "\n\n<details>\n<summary>pytest stdout tail</summary>\n\n"
+            "```\n"
+            f"{stdout_tail.strip()[-1500:]}\n"
+            "```\n\n</details>"
+        )
+
+    return header + stats + details
+
+
+def generate_pr_description(changes: list[str], repo_info: dict, test_result: dict | None = None) -> str:
     client = get_client()
     messages = [
         {
             "role": "user",
-            "content": f"Write a PR description for modernizing repository {repo_info['owner']}/{repo_info['repo']}.\n\nChanges made:\n" + "\n".join(f"- {c}" for c in changes) + "\n\nOutput markdown. Include: (1) what was changed, (2) why, (3) what was NOT tested. Max 200 words. Do not oversell. Do NOT include a disclaimer or LLM-authorship section — that will be prepended automatically."
+            "content": f"Write a PR description for modernizing repository {repo_info['owner']}/{repo_info['repo']}.\n\nChanges made:\n" + "\n".join(f"- {c}" for c in changes) + "\n\nOutput markdown. Include: (1) what was changed, (2) why, (3) what was NOT tested (e.g. manual smoke of CLI, integration with downstream services). Max 200 words. Do not oversell. Do NOT include a disclaimer, LLM-authorship section, or a 'Test results' section — those are appended automatically."
         }
     ]
     resp = client.messages.create(
@@ -32,7 +71,12 @@ def generate_pr_description(changes: list[str], repo_info: dict) -> str:
         if block.type == "text":
             body = block.text
             break
-    return DISCLAIMER_HEADER + body
+
+    test_block = ""
+    if test_result is not None:
+        test_block = "\n\n---\n\n" + format_test_results(test_result)
+
+    return DISCLAIMER_HEADER + body + test_block
 
 
 def commit_and_push(repo_path: Path, changes: list[str], dry_run: bool = False) -> None:
