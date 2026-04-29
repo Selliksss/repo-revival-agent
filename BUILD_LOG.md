@@ -542,8 +542,8 @@ returns `repo-revival-agent` identity before posting.
 - LLM-fixer regex hardcodes `term2048/` prefix for root-cause extraction
   — works on term2048, will not extract root causes from other repos.
   Must generalize to any non-stdlib non-venv path before next target.
-- `bot_env.py` defaults `"Selliksss"` for GH_BOT_USER if `.env` is missing
-  — silent fallback to personal account is a footgun.
+- `bot_user()` now raises RuntimeError if GH_BOT_USER is not set —
+  footgun closed.
 - `attempt_loop` intentionally leaves file in "applied but not passed" state
   between attempts; if interrupted mid-loop, local fork has uncommitted
   partial fixes.
@@ -552,6 +552,6 @@ returns `repo-revival-agent` identity before posting.
 
 - Generalize root-cause regex (remove `term2048/` hardcode) before next
   target repo
-- Fix bot_env.py footgun (hard failure on missing GH_BOT_TOKEN)
+- Fix bot_env.py footgun (GH_BOT_USER fallback — DONE, bot_user() now hard-fails)
 - Second test target: Python repo where LLM-fixer can converge to passed
 - Distribution: post-mortem writeup for X/Telegram on the term2048 arc

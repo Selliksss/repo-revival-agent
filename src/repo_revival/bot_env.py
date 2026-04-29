@@ -28,5 +28,13 @@ def bot_env() -> dict:
 
 
 def bot_user() -> str:
-    """Return bot's GitHub username."""
-    return os.environ.get("GH_BOT_USER", "Selliksss")
+    """Return bot's GitHub username from GH_BOT_USER env var.
+    Fails loudly if not set — must never silently fall back to a
+    personal account."""
+    user = os.environ.get("GH_BOT_USER")
+    if not user:
+        raise RuntimeError(
+            "GH_BOT_USER not set. Refusing to use a fallback identity. "
+            "Set GH_BOT_USER in .env or environment before running agent actions."
+        )
+    return user
