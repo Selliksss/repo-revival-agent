@@ -1,6 +1,6 @@
 from pathlib import Path
 import typer
-from repo_revival.revive import fork, bumper, pr, tester
+from repo_revival.revive import fork, bumper, pr, tester, codemod
 
 
 def revive(repo_url: str, open_pr: bool = False) -> None:
@@ -14,7 +14,14 @@ def revive(repo_url: str, open_pr: bool = False) -> None:
     typer.echo("🔧 Bumping dependencies...")
     dep_changes = bumper.bump_dependencies(repo_path)
 
-    all_changes = py_changes + dep_changes
+    typer.echo("🔧 Applying codemods...")
+    codemod_changes = codemod.fix_imp_module(repo_path)
+    if codemod_changes:
+        typer.echo("📋 Codemod changes:")
+        for c in codemod_changes:
+            typer.echo(f"  - {c}")
+
+    all_changes = py_changes + dep_changes + codemod_changes
     if not all_changes:
         typer.echo("No changes needed. Repo is already modern.")
         return
