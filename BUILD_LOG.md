@@ -469,3 +469,89 @@ title under length limit. End-to-end works.
 - Fork pipeline MVP: Python 2 → 3 auto-fix via 2to3 + tests
 - Extended dataset (15-20 repos)
 - Distribution: X-thread or Telegram post about the auth-bug story
+
+## Day 9 — LLM fixer + term2048 follow-up
+
+**Commit:** d895f45
+
+### What was built
+
+**LLM-fixer module** (`src/repo_revival/revive/llm_fixer.py`):
+- Opt-in `--use-llm-fixer` flag in revive CLI. Called from `revive.py` when
+  test gate fails and flag is set.
+- `attempt_loop()` runs up to 2 LLM-guided search/replace edit cycles.
+  Each cycle: extract deepest non-test root-cause file from pytest ERROR
+  block → build root-cause dict `{file, line, code, exception_type}` →
+  call LLM with explicit root-cause context → verify SEARCH block is
+  unique in file → write fix to disk → run tests → rollback if worse.
+- Root-cause extraction: parses traceback to find `file:lineno:` line,
+  the code line immediately after, and the exception class (via regex
+  `r"^\s*(?:[\w.]+\.)?(\w+(?:Error|Exception|Operation|Failure)):\s+"`).
+- LLM prompt rules: focus on the root-cause line, never touch files
+  under `tests/`, return CANNOT_FIX if fix requires multi-file changes
+  or changes runtime semantics.
+- Search/replace blocks (not unified diff) with uniqueness guard:
+  `file_content.count(search)` must be exactly 1.
+- Apply-then-test order: fix is written to disk before pytest re-run.
+  Rollback via in-memory original if errors increase.
+- Early termination: `(failing_file, exception_type)` signature tracked
+  across attempts; loop stops if signature repeats unchanged.
+
+**PR integration** (`src/repo_revival/revive/pr.py`):
+- `format_llm_fixes()` renders all applied LLM fixes as a separate PR
+  section: "## LLM-assisted fixes ⚠️ REVIEW CAREFULLY" with per-file
+  rationale and `git diff`-style diff blocks.
+- All LLM fixes land in PR body only after human-review step — never
+  silently merged.
+
+### What was validated
+
+**E2E on bfontaine/term2048 (fork clone at `/tmp/repo-revival-forks/bfontaine/term2048`):**
+- Bumper + codemod fix 1 of 4 collection errors: `imp.reload` →
+  `importlib.reload` in `tests/helpers.py`.
+- LLM-fixer attempt 1 fixes 2 more: wraps `sys.stdin.fileno()` and
+  `termios.tcgetattr` in `term2048/keypress.py` with try/except, since
+  pytest redirects stdin at collection time.
+- Final state: 1 error remains in `tests/test_keypress.py:23`:
+  `keypress = kp._getRealModule()` → `AttributeError: module
+  'term2048.keypress' has no attribute '_getRealModule'`.
+- `_getRealModule` verified absent from every release tag 0.1.2 through
+  0.2.7 — the test predates any release. The hard "never touch tests/"
+  rule correctly prevents the agent from masking this latent bug.
+- Agent gate aborts; no PR opened. Correct outcome.
+
+### term2048#41 follow-up
+
+**Bot comment posted** from `@repo-revival-agent`:
+https://github.com/bfontaine/term2048/pull/41#issuecomment-4348072749
+
+Comment is FYI / closing-the-loop. Details what the pipeline fixed,
+flags the dormant `_getRealModule` test bug (with traceback excerpt),
+explicitly does not ask for reopen. Pre-flight verified `gh api user`
+returns `repo-revival-agent` identity before posting.
+
+### Both maintainer policies from term2048#41 now closed in code
+
+- **Policy #1** (bot identity): Day 7 commit. Verified pre-flight on
+  every posting.
+- **Policy #2** (test before PR): Day 8 commit (tester.py) + Day 9 commit
+  (LLM-fixer as secondary defense).
+
+### Known limitations (honest)
+
+- LLM-fixer regex hardcodes `term2048/` prefix for root-cause extraction
+  — works on term2048, will not extract root causes from other repos.
+  Must generalize to any non-stdlib non-venv path before next target.
+- `bot_env.py` defaults `"Selliksss"` for GH_BOT_USER if `.env` is missing
+  — silent fallback to personal account is a footgun.
+- `attempt_loop` intentionally leaves file in "applied but not passed" state
+  between attempts; if interrupted mid-loop, local fork has uncommitted
+  partial fixes.
+
+### Still TODO
+
+- Generalize root-cause regex (remove `term2048/` hardcode) before next
+  target repo
+- Fix bot_env.py footgun (hard failure on missing GH_BOT_TOKEN)
+- Second test target: Python repo where LLM-fixer can converge to passed
+- Distribution: post-mortem writeup for X/Telegram on the term2048 arc
