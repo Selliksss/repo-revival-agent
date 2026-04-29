@@ -1,9 +1,9 @@
 from pathlib import Path
 import typer
-from repo_revival.revive import fork, bumper, pr, tester, codemod
+from repo_revival.revive import fork, bumper, pr, tester, codemod, llm_fixer
 
 
-def revive(repo_url: str, open_pr: bool = False) -> None:
+def revive(repo_url: str, open_pr: bool = False, use_llm_fixer: bool = False) -> None:
     owner, repo = _parse_url(repo_url)
     typer.echo(f"🍴 Forking {owner}/{repo}...")
     repo_path = fork.fork_and_clone(owner, repo)
@@ -47,18 +47,36 @@ def revive(repo_url: str, open_pr: bool = False) -> None:
         typer.echo(f"   stderr tail:\n{test_result.get('stderr_tail', '')}")
 
     if status != "passed":
-        typer.echo(
-            f"\n❌ Aborting: tests did not pass (status={status}). "
-            f"Per policy, revive PR is not opened when test suite fails or is missing."
-        )
-        return
+        if use_llm_fixer:
+            typer.echo("\n🤖 Attempting LLM-assisted fixes...")
+            fixer_result = llm_fixer.attempt_loop(repo_path, test_result)
+            for entry in fixer_result["attempts_log"]:
+                typer.echo(
+                    f" attempt {entry['attempt_num']}: "
+                    f"{entry.get('file', '?')} → {entry.get('fix_brief', '?')} → "
+                    f"status={entry.get('status_after', '?')}"
+                )
+            test_result = fixer_result["final_test_result"]
+            status = test_result["status"]
+            llm_fixes = fixer_result["fixes"]
+        else:
+            llm_fixes = []
+
+        if status != "passed":
+            typer.echo(
+                f"\n❌ Aborting: tests did not pass (status={status}). "
+                f"Per policy, revive PR is not opened when test suite fails."
+            )
+            return
+    else:
+        llm_fixes = []
 
     if not open_pr:
         typer.echo("\n[dry-run] Tests passed. To open real PR: --open-pr")
         return
 
     typer.echo("\n📝 Generating PR description...")
-    description = pr.generate_pr_description(all_changes, {"owner": owner, "repo": repo}, test_result=test_result)
+    description = pr.generate_pr_description(all_changes, {"owner": owner, "repo": repo}, test_result=test_result, llm_fixes=llm_fixes)
     typer.echo("\n--- PR DESCRIPTION ---")
     typer.echo(description)
     typer.echo("--- END ---\n")

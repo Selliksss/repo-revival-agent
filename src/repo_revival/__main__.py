@@ -178,9 +178,13 @@ def _write_accuracy_report(results: list, start: int = 0, total: int = 0):
 
 
 @app.command(name="revive")
-def revive_cmd(repo_url: str, open_pr: bool = typer.Option(False, "--open-pr")):
+def revive_cmd(
+    repo_url: str,
+    open_pr: bool = typer.Option(False, "--open-pr"),
+    use_llm_fixer: bool = typer.Option(False, "--use-llm-fixer", help="Allow LLM to attempt minimal fixes when test gate fails (experimental, opt-in)"),
+):
     """Fork, bump deps, show diff (default dry-run)."""
-    revive_do(repo_url, open_pr=open_pr)
+    revive_do(repo_url, open_pr=open_pr, use_llm_fixer=use_llm_fixer)
 
 
 @app.command()
