@@ -222,3 +222,6 @@ __marimo__/
 test-repos/*
 !test-repos/dataset.yaml
 reports/
+
+# asciinema recordings (regenerated locally, not committed)
+*.cast
