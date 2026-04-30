@@ -221,4 +221,4 @@ __marimo__/
 # Cloned test repos (kept locally only, not committed)
 test-repos/*
 !test-repos/dataset.yaml
-reports/*.cast
+reports/

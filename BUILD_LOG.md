@@ -555,3 +555,107 @@ returns `repo-revival-agent` identity before posting.
 - Fix bot_env.py footgun (GH_BOT_USER fallback — DONE, bot_user() now hard-fails)
 - Second test target: Python repo where LLM-fixer can converge to passed
 - Distribution: post-mortem writeup for X/Telegram on the term2048 arc
+
+## Day 10 — pre-baseline check + unified failure signatures
+
+**Commit:** _(pending)_
+
+### What we shipped
+
+- **Pre-baseline test runner.** `tester.run_tests()` called twice per repo:
+  once before any changes (baseline), once after bumper+codemod+LLM-fix
+  (current). Both results passed to `compare_results()`.
+
+- **`compare_results()` with verdicts.** Returns one of:
+  `all_passing | no_regression | regression | improvement | baseline_unknown`.
+  Unified failure keyspace: `failed_ids` (test failures) merged with
+  `error_signatures` (collection errors) into a single comparable set.
+
+- **Unified failure signatures.** Collection errors parsed as
+  `"file_path::ExceptionType"` strings (e.g. `tests/test_keypress.py::ImportError`).
+  `run_tests()` returns both `failed_ids` and `error_signatures`.
+  `compare_results()` treats both as equivalently "failed".
+
+- **LLM-fixer baseline filter.** `attempt_loop()` now accepts `baseline_result`
+  parameter. Root-cause files appearing in baseline failures are excluded
+  from LLM targeting. Pre-existing maintainer bugs are not claimed as agent fixes.
+
+- **Honest PR test results section.** `format_test_results()` in `pr.py` renders
+  separate lists for pre-existing test failures vs pre-existing collection errors,
+  with explicit "(NOT caused by these changes)" labels. New failures are labeled
+  "(caused by these changes)".
+
+### E2E results
+
+**bndr/pycycle:**
+- baseline: `failed_ids=['test_pycycle.py::test_simple_project']`, `error_signatures=[]`
+- post-bump: same — no change
+- verdict: `no_regression`
+- pre-existing: `test_pycycle.py::test_simple_project` — an assertion bug in
+  cycle-traversal ordering, existed before any changes
+- LLM-fixer: `cannot_fix` — failing file is `test_pycycle.py` (tests/), filtered out
+- Pipeline reached PR step (dry-run). No regressions detected.
+
+**bfontaine/term2048:**
+- baseline: 4 collection errors across `test_board`, `test_game`, `test_keypress`, `test_ui`
+- codemod (`imp.reload → importlib.reload`) fixed `test_board.py::ModuleNotFoundError`
+- post-bump: 3 errors remain (`test_game`, `test_keypress`, `test_ui` — all `io.UnsupportedOperation`)
+- verdict: `regression` — 2 new errors introduced (`test_keypress`, `test_ui`), 1 fixed
+  (`test_board`), 1 pre-existing (`test_game`)
+- LLM-fixer attempt 1 on `tests/keypress.py`: wrapped `sys.stdin.fileno()` in
+  try/except. Errors went 3→1 but the remaining error changed from `io.UnsupportedOperation`
+  to `AttributeError` — actively worse. Rollback triggered correctly.
+- LLM-fixer attempt 2: `cannot_fix` — no non-test failing files remain
+- Gate blocked PR. This is the **correct** outcome for term2048 — maintainer
+  already closed #41, re-opening would be harassment.
+
+### Known issues (deferred)
+
+1. **Codemod scope asymmetry.** `codemod.fix_imp_module()` rewrites files under
+   `tests/` (e.g. `tests/helpers.py` in term2048). LLM-fixer has hard "no
+   tests/" exclusion rule, but codemod has no such guard. A maintainer may
+   reasonably object to an agent modifying their test code. Risk: asymmetric
+   behavior between automated codemod and LLM-fixer. **Not blocking current
+   pipeline — deferred to next iteration.**
+
+2. **Codemod whitespace bleed.** `fix_imp_module()` drops blank lines around
+   the modified `imp.reload → importlib.reload` block. Cosmetic but visible
+   in diffs. Tracked separately.
+
+3. **LLM-fixer compliance-fix tendency.** Observed on term2048: the LLM wraps
+   the failing line in `try/except` rather than identifying the root cause
+   (`stdin.fileno()` called during pytest's stdin capture). The rollback
+   mechanism catches this, but the fundamental issue is that the model
+   reaches for "suppress the error" instead of "understand why it errors".
+   Future: add explicit instruction in fixer prompt to prefer identifying
+   root cause over speculative compliance wrapping.
+
+### What term2048 taught us
+
+The codemod fixed surface-level errors (`imp` module missing), which **unmasked**
+deeper errors that were always present (`io.UnsupportedOperation: sys.stdin.fileno()
+call not allowed` during pytest's stdin capture). A naive agent without baseline
+would have seen 4→3 errors and called it "improvement" — opening a PR over
+a net -1 error count while actually introducing regressions.
+
+The pre-baseline check + signature-level comparison correctly identifies this:
+the 3 remaining errors are a **different** set of failures, not a subset of the
+original 4. Signature-based comparison is the only way to detect this without
+running the baseline.
+
+This is the strongest argument for the pre-baseline architecture:
+codemod fixes don't always reduce to a subset of the original failures.
+
+### Numbers
+
+- LLM API calls in revive stage on term2048: 1 (failed, rolled back)
+- LLM API calls in revive stage on pycycle: 0 (no errors to fix)
+- Wall clock per repo: ~30–90 seconds end-to-end dry-run
+- Estimated cost per dry-run: <$0.05 per repo
+- PRs opened: 0 (both runs dry-run; term2048 correctly blocked)
+
+### Still open
+
+- Codemod scope guard (no rewrites under tests/) — symmetry with LLM-fixer
+- Codemod whitespace fix (blank-line bleed around modified blocks)
+- LLM-fixer prompt tuning to prefer CANNOT_FIX over speculative try/except wraps

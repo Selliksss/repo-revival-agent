@@ -15,6 +15,7 @@ def attempt_loop(
     repo_path: Path,
     first_test_result: dict,
     max_attempts: int = 2,
+    baseline_result: dict | None = None,
 ) -> dict:
     """
     Attempt to fix pytest collection errors via minimal LLM-guided edits.
@@ -38,6 +39,28 @@ def attempt_loop(
         # 1. Extract failing files and root cause details
         pytest_excerpt = _pytest_excerpt(current_test_result)
         root_causes = extract_root_causes(pytest_excerpt, repo_path)
+
+        # 2. Filter out pre-existing failures if baseline provided
+        if baseline_result:
+            baseline_failed = baseline_result.get("failed_ids", [])
+            baseline_error_sigs = baseline_result.get("error_signatures", [])
+
+            if baseline_failed or baseline_error_sigs:
+                # Build set of file names that had failures in baseline
+                baseline_files: set[str] = set()
+                for fid in baseline_failed:
+                    parts = fid.split("::")[0]
+                    baseline_files.add(Path(parts).name)
+                for sig in baseline_error_sigs:
+                    file_part = sig.split("::")[0]
+                    baseline_files.add(Path(file_part).name)
+
+                # Filter root_causes: exclude any where file.name matches baseline failure file
+                new_root_causes = [rc for rc in root_causes if rc["file"].name not in baseline_files]
+                if len(root_causes) != len(new_root_causes):
+                    rc_removed = len(root_causes) - len(new_root_causes)
+                    root_causes = new_root_causes
+
         top_root_cause = top_failing_root_cause(root_causes)
 
         if top_root_cause is None:
@@ -46,7 +69,7 @@ def attempt_loop(
                 "file": None,
                 "fix_brief": "no non-test failing files found",
                 "status_after": "cannot_fix",
-                "reason": "all failures in tests/ directory",
+                "reason": "all failures in tests/ directory or pre-existing",
             }
             attempts_log.append(log_entry)
             break
@@ -212,10 +235,12 @@ def extract_root_causes(pytest_output: str, repo_path: Path) -> list[dict]:
         deepest_file: Path | None = None
         deepest_lineno: int | None = None
         for line in reversed(block_lines):
-            m = re.search(r"(term2048/[^\s:]+\.py):(\d+):", line)
+            m = re.search(r"(\S+\.py):(\d+):", line)
             if m:
                 fname = m.group(1)
                 lineno = int(m.group(2))
+                if ".venv" in fname:
+                    continue
                 full_path = repo_path / fname
                 if full_path.exists() and not _is_test_file(full_path):
                     deepest_file = full_path

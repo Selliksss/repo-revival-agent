@@ -13,26 +13,108 @@ DISCLAIMER_HEADER = """## Disclaimer
 """
 
 
-def format_test_results(test_result: dict) -> str:
+COLLECTION_EXC_TYPES = {
+    "ModuleNotFoundError", "ImportError", "SyntaxError", "IndentationError",
+    "io.UnsupportedOperation", "UnsupportedOperation", "AttributeError",
+}
+
+
+def _is_collection_error(item: str) -> bool:
+    """True if item's exception type is a known collection error type."""
+    if "::" not in item:
+        return False
+    exc_type = item.split("::")[1]
+    return exc_type in COLLECTION_EXC_TYPES
+
+
+def format_test_results(test_result: dict, baseline_result: dict | None = None, comparison: dict | None = None) -> str:
     """Render a markdown block describing how the test suite ran against the bumped deps."""
     status = test_result.get("status")
     tests = test_result.get("tests") or {}
     stdout_tail = test_result.get("stdout_tail", "")
+    verdict = comparison.get("verdict") if comparison else None
 
-    if status == "passed":
-        header = "## Test results\n\n✅ Test suite passed against bumped dependencies."
-    elif status == "failed":
+    preexisting_test_failures: list[str] = []
+    preexisting_collection_errors: list[str] = []
+    new_test_failures: list[str] = []
+    new_collection_errors: list[str] = []
+    if comparison and comparison.get("preexisting_failures"):
+        for item in comparison["preexisting_failures"]:
+            if _is_collection_error(item):
+                preexisting_collection_errors.append(item)
+            else:
+                preexisting_test_failures.append(item)
+    if comparison and comparison.get("new_failures"):
+        for item in comparison["new_failures"]:
+            if _is_collection_error(item):
+                new_collection_errors.append(item)
+            else:
+                new_test_failures.append(item)
+
+    improved_items: list[str] = comparison.get("fixed_failures", []) if comparison else []
+
+    if status == "passed" and verdict in ("no_regression", "improvement", "all_passing"):
+        header = "## Test results\n\n✅ No regression introduced."
+        sub_parts = []
+        if tests.get("passed", 0) > 0:
+            sub_parts.append(f"- {tests['passed']} tests passing")
+        if preexisting_test_failures:
+            sub_parts.append(f"- Pre-existing test failures (NOT caused by these changes):\n  - " + "\n  - ".join(preexisting_test_failures))
+        if preexisting_collection_errors:
+            sub_parts.append(f"- Pre-existing collection errors (NOT caused by these changes):\n  - " + "\n  - ".join(preexisting_collection_errors))
+        stats = "\n\n" + "\n".join(sub_parts) if sub_parts else ""
+    elif verdict == "improvement":
+        header = "## Test results\n\n✅ Improvements detected."
+        sub_parts = []
+        if improved_items:
+            sub_parts.append(f"- Newly fixed:\n  - " + "\n  - ".join(improved_items))
+        if preexisting_test_failures:
+            sub_parts.append(f"- Still failing (pre-existing):\n  - " + "\n  - ".join(preexisting_test_failures))
+        if preexisting_collection_errors:
+            sub_parts.append(f"- Collection errors remaining (pre-existing):\n  - " + "\n  - ".join(preexisting_collection_errors))
+        stats = "\n\n" + "\n".join(sub_parts) if sub_parts else ""
+    elif status == "failed" and preexisting_test_failures and not preexisting_collection_errors and not new_test_failures and not new_collection_errors:
+        header = "## Test results\n\n✅ No regression — all failures are pre-existing (NOT caused by these changes)."
+        sub_parts = []
+        if tests.get("passed", 0) > 0:
+            sub_parts.append(f"- {tests['passed']} tests passing")
+        sub_parts.append(f"- Pre-existing test failures:\n  - " + "\n  - ".join(preexisting_test_failures))
+        stats = "\n\n" + "\n".join(sub_parts) if sub_parts else ""
+    elif status == "failed" and preexisting_collection_errors and not preexisting_test_failures and not new_test_failures and not new_collection_errors:
+        header = "## Test results\n\n✅ No regression — all failures are pre-existing collection errors (NOT caused by these changes)."
+        sub_parts = []
+        sub_parts.append(f"- Pre-existing collection errors:\n  - " + "\n  - ".join(preexisting_collection_errors))
+        stats = "\n\n" + "\n".join(sub_parts) if sub_parts else ""
+    elif status == "failed" and (preexisting_test_failures or preexisting_collection_errors or new_test_failures or new_collection_errors):
+        header = "## Test results\n\n❌ Test suite failed — some new failures introduced alongside pre-existing ones."
+        sub_parts = []
+        if new_collection_errors:
+            sub_parts.append(f"- NEW collection errors (caused by these changes):\n  - " + "\n  - ".join(new_collection_errors))
+        if new_test_failures:
+            sub_parts.append(f"- NEW test failures (caused by these changes):\n  - " + "\n  - ".join(new_test_failures))
+        if preexisting_test_failures:
+            sub_parts.append(f"- Pre-existing test failures (NOT caused by these changes):\n  - " + "\n  - ".join(preexisting_test_failures))
+        if preexisting_collection_errors:
+            sub_parts.append(f"- Pre-existing collection errors (NOT caused by these changes):\n  - " + "\n  - ".join(preexisting_collection_errors))
+        stats = "\n\n" + "\n".join(sub_parts) if sub_parts else ""
+    elif status == "passed" and verdict == "baseline_unknown":
+        header = "## Test results\n\n✅ Test suite passed against bumped dependencies (no baseline available)."
+        stats = ""
+    elif status == "failed" and not preexisting_test_failures and not preexisting_collection_errors and not new_test_failures and not new_collection_errors:
         header = "## Test results\n\n❌ Test suite FAILED against bumped dependencies."
+        stats = ""
     elif status == "no_tests":
         header = f"## Test results\n\n⚠️ No test suite detected ({test_result.get('reason', '')})."
+        stats = ""
     elif status == "error":
         header = f"## Test results\n\n⚠️ Test runner errored at stage `{test_result.get('stage', '?')}` — could not verify."
+        stats = ""
     else:
         header = f"## Test results\n\nUnknown status: {status}"
+        stats = ""
 
-    stats = ""
-    if tests:
-        stats = (
+    if tests and not stats.startswith("\n\n-"):
+        stats += (
             f"\n\n- Passed: {tests.get('passed', 0)}"
             f"\n- Failed: {tests.get('failed', 0)}"
             f"\n- Errors: {tests.get('errors', 0)}"
@@ -79,6 +161,8 @@ def generate_pr_description(
     repo_info: dict,
     test_result: dict | None = None,
     llm_fixes: list[dict] | None = None,
+    baseline_result: dict | None = None,
+    comparison: dict | None = None,
 ) -> str:
     client = get_client()
     messages = [
@@ -105,7 +189,7 @@ def generate_pr_description(
 
     test_block = ""
     if test_result is not None:
-        test_block = "\n\n---\n\n" + format_test_results(test_result)
+        test_block = "\n\n---\n\n" + format_test_results(test_result, baseline_result=baseline_result, comparison=comparison)
 
     return DISCLAIMER_HEADER + body + llm_block + test_block
 
