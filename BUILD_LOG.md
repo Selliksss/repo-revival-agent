@@ -558,7 +558,7 @@ returns `repo-revival-agent` identity before posting.
 
 ## Day 10 — pre-baseline check + unified failure signatures
 
-**Commit:** _(pending)_
+**Commit:** a0b6d8d
 
 ### What we shipped
 
@@ -659,3 +659,70 @@ codemod fixes don't always reduce to a subset of the original failures.
 - Codemod scope guard (no rewrites under tests/) — symmetry with LLM-fixer
 - Codemod whitespace fix (blank-line bleed around modified blocks)
 - LLM-fixer prompt tuning to prefer CANNOT_FIX over speculative try/except wraps
+
+---
+
+## Day 11 — closeout: codemod symmetry + LLM-fixer prompt tuning
+
+**Commit:** 08f75ed
+
+### What we shipped (the 3 deferred bugs from Day 10)
+
+1. **Codemod scope guard.** `fix_imp_module()` now skips files under `tests/`
+   and `test_*.py`. Symmetry with the LLM-fixer's hard "no tests/" rule —
+   agents should not modify maintainers' test code, regardless of which
+   subsystem is doing it.
+
+2. **Codemod whitespace preservation.** Rewrote the `imp.reload` migration as
+   an atomic line-pair replacement, preserving original indentation and
+   collapsing only the single blank line that becomes redundant after the
+   shim is removed.
+
+3. **LLM-fixer prompt tuning.** Added explicit guidance to prefer
+   `CANNOT_FIX` over speculative `try/except` wraps. Direct response to the
+   term2048 attempt where the model wrapped `sys.stdin.fileno()` in
+   `try/except` instead of identifying pytest's stdin capture as the root
+   cause.
+
+Bonus: path safety guard in `extract_root_causes()` — paths that resolve
+outside the repo (e.g. stdlib paths leaked from a traceback) are now
+rejected before being passed to the fixer.
+
+### E2E retest
+
+**bndr/pycycle:** unchanged from Day 10 — `verdict=no_regression`,
+the pre-existing assertion bug in `test_simple_project` is correctly
+disclosed in the PR body as "(NOT caused by these changes)".
+
+**bfontaine/term2048:** verdict shifted from `regression` (Day 10) to
+`no_regression` (Day 11). The codemod no longer touches `tests/helpers.py`,
+so post-bump still has all 4 original collection errors. The PR body
+would render: "✅ No regression — all failures are pre-existing collection
+errors (NOT caused by these changes)" with explicit per-file listing.
+The PR is still gated manually — term2048#41 was closed by the maintainer,
+so re-opening would be harassment.
+
+### What I learned
+
+- I learned how to actually use GitHub. Forks, PRs, scopes, bot accounts,
+  identity hygiene — not just `git push`. This is what the project taught
+  me first.
+- Quality matters more than speed. Day 10 had an "improvement" that was
+  actually a regression. Adding the baseline check took an extra day and
+  was the right call.
+- Don't give up when something goes sideways. I wasn't accepted into the
+  Anthropic hackathon — I built the project anyway, on my own timeline,
+  and finished it. Following through on a personal commitment matters
+  more than the external validation that triggered the idea.
+
+### Closing
+
+repo-revival-agent ships at Day 11. The classifier is at 9/9 on the test set,
+the revive pipeline has a working test gate with baseline comparison and an
+opt-in LLM-fixer, the let_rest pipeline has a live artifact
+([rholder/retrying#101](https://github.com/rholder/retrying/issues/101)),
+and the only PR the agent ever opened ([term2048#41](https://github.com/bfontaine/term2048/pull/41))
+was closed by the maintainer with feedback that became the design spec
+for everything in Days 7–11.
+
+Done. Next is something new.
