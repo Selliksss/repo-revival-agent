@@ -69,8 +69,8 @@ uv sync
 
 # Add your keys to .env:
 echo "ANTHROPIC_API_KEY=sk-ant-api03-..." >> .env
-echo "GH_TOKEN=ghp_..." >> .env          # bot account PAT (public_repo scope)
-echo "GH_BOT_USER=repo-revival-agent" >> .env
+echo "GH_BOT_TOKEN=ghp_..." >> .env      # bot account PAT (public_repo scope)
+echo "GH_BOT_USER=repo-revival-agent" >> .env  # your bot account's username
 
 # Classify a repo:
 uv run python -m repo_revival classify https://github.com/rholder/retrying
