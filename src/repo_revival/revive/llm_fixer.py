@@ -242,6 +242,9 @@ def extract_root_causes(pytest_output: str, repo_path: Path) -> list[dict]:
                 if ".venv" in fname:
                     continue
                 full_path = repo_path / fname
+                # Guard: skip if resolved path is outside the repo
+                if not full_path.is_relative_to(repo_path):
+                    continue
                 if full_path.exists() and not _is_test_file(full_path):
                     deepest_file = full_path
                     deepest_lineno = lineno
@@ -356,6 +359,16 @@ def llm_fix_call(file_path: Path, file_content: str, pytest_excerpt: str, root_c
             root_cause_block = "\nROOT CAUSE:\n" + "\n".join(parts) + "\n"
 
     system_prompt = """You fix Python collection errors that prevent pytest from importing test modules. You make MINIMAL changes — surgical fixes, not refactors.
+
+IMPORTANT: prefer returning CANNOT_FIX over speculative wrapping. If you cannot identify the root cause of the failure with high confidence, return CANNOT_FIX. Do not wrap the failing line in try/except just to suppress the symptom — that masks the real bug and can introduce new failures downstream.
+
+A genuine fix understands WHY the code fails and changes the logic or imports accordingly. A try/except around a failing line that you do not understand is not a fix; it is a bandage that will fail QA.
+
+Return CANNOT_FIX whenever:
+- You can identify the symptom but not the root cause
+- The fix you would apply is just wrapping the failure in error handling
+- You are unsure whether the surrounding code expects a non-None / non-error result
+
 Output format strictly:
 If you can fix the issue, respond exactly:
 RATIONALE: <one sentence explaining why this fix is needed>

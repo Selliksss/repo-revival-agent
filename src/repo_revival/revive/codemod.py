@@ -37,6 +37,11 @@ def fix_imp_module(repo_path: Path) -> list[str]:
     Empty list if nothing changed."""
     changes = []
     for path in _scan_py_files(repo_path):
+        # Bug 1 fix: skip test files — symmetry with LLM-fixer policy.
+        # Maintainer-owned test code is out of scope for codemods.
+        if "tests" in path.parts or path.name.startswith("test_"):
+            continue
+
         try:
             text = path.read_text(encoding="utf-8", errors="replace")
         except Exception:
@@ -73,13 +78,25 @@ def fix_imp_module(repo_path: Path) -> list[str]:
                     flags=re.MULTILINE,
                 )
             elif has_import_imp and has_imp_reload:
-                # Replace 'import imp\nreload = imp.reload' with 'from importlib import reload'
-                # Remove the 'import imp' line
-                new_text = re.sub(r"^\s*import imp\s*$", "", text, flags=re.MULTILINE)
-                # Replace reload = imp.reload
-                new_text = re.sub(r"\breload\s*=\s*imp\.reload\b", "from importlib import reload", new_text)
-                # Clean up double blank lines that may result from removing 'import imp'
-                new_text = re.sub(r"\n\n\n+", "\n\n", new_text)
+                # Match the 'import imp' line + 'reload = imp.reload' line as a unit,
+                # preserving indentation of the import line (the reload line indentation
+                # shifts to align with the else: block — that is the correct Python
+                # alignment for the replacement). The replacement is a single
+                # from importlib import reload statement at the same indentation
+                # as the original import imp line.
+                import_line_m = re.search(r"^(\s*)import imp\s*$", text, re.MULTILINE)
+                if import_line_m:
+                    indent = import_line_m.group(1)
+                    # Match both lines together so we replace the pair atomically
+                    pair_pattern = re.compile(
+                        rf"^{re.escape(import_line_m.group(0))}\n{re.escape(indent)}reload\s*=\s*imp\.reload\b",
+                        re.MULTILINE
+                    )
+                    new_text = pair_pattern.sub(f"{indent}from importlib import reload", text)
+                    # Clean up any double blank lines created by the replacement
+                    new_text = re.sub(r"\n{3,}", "\n\n", new_text)
+                else:
+                    new_text = text
             else:
                 continue
 
